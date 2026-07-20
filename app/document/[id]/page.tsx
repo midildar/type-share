@@ -5,8 +5,6 @@ import TitleEditor from '@/components/TitleEditor'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
-export const dynamic = 'force-dynamic'
-
 // 1. Extract the data fetching and UI into its own async component
 async function DocumentContent({ id }: { id: string }) {
   const supabase = await createClient()
