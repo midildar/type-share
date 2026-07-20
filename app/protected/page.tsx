@@ -1,43 +1,94 @@
-import { redirect } from "next/navigation";
+'use client'
 
-import { createClient } from "@/lib/supabase/server";
-import { InfoIcon } from "lucide-react";
-import { FetchDataSteps } from "@/components/tutorial/fetch-data-steps";
-import { Suspense } from "react";
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 
-async function UserDetails() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
+export default function Dashboard() {
+  const router = useRouter()
+  const supabase = createClient()
+  
+  const [ownedDocs, setOwnedDocs] = useState<any[]>([])
+  const [sharedDocs, setSharedDocs] = useState<any[]>([])
 
-  if (error || !data?.claims) {
-    redirect("/auth/login");
+  useEffect(() => {
+    async function loadDocs() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      // Fetch documents you own
+      const { data: owned } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('owner_id', user.id)
+        .order('created_at', { ascending: false })
+      
+      setOwnedDocs(owned || [])
+
+      // Fetch documents shared with you (joining the documents table)
+      const { data: shared } = await supabase
+        .from('document_shares')
+        .select('documents(*)')
+        .eq('user_id', user.id)
+
+      // Extract the nested document objects
+      setSharedDocs(shared?.map(s => s.documents) || [])
+    }
+    loadDocs()
+  }, [])
+
+  async function createEmptyDocument() {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data } = await supabase.from('documents').insert({ title: 'Untitled Document', owner_id: user?.id }).select().single()
+    if (data) router.push(`/document/${data.id}`)
   }
 
-  return JSON.stringify(data.claims, null, 2);
-}
+  async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const text = await file.text()
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    const { data } = await supabase.from('documents').insert({
+      title: file.name.replace(/\.[^/.]+$/, ""),
+      content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
+      owner_id: user?.id
+    }).select().single()
 
-export default function ProtectedPage() {
+    if (data) router.push(`/document/${data.id}`)
+  }
+
   return (
-    <div className="flex-1 w-full flex flex-col gap-12">
-      <div className="w-full">
-        <div className="bg-accent text-sm p-3 px-5 rounded-md text-foreground flex gap-3 items-center">
-          <InfoIcon size="16" strokeWidth={2} />
-          This is a protected page that you can only see as an authenticated
-          user
-        </div>
+    <div className="max-w-4xl mx-auto py-10 px-4">
+      <div className="flex gap-4 mb-10">
+        <button onClick={createEmptyDocument} className="bg-black text-white px-4 py-2 rounded-md hover:bg-slate-800">
+          + New Blank Document
+        </button>
+        <label className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-4 py-2 rounded-md cursor-pointer border">
+          Upload .txt or .md
+          <input type="file" accept=".txt,.md" onChange={handleFileUpload} className="hidden" />
+        </label>
       </div>
-      <div className="flex flex-col gap-2 items-start">
-        <h2 className="font-bold text-2xl mb-4">Your user details</h2>
-        <pre className="text-xs font-mono p-3 rounded border max-h-32 overflow-auto">
-          <Suspense>
-            <UserDetails />
-          </Suspense>
-        </pre>
+
+      <h2 className="text-xl font-bold mb-4 border-b pb-2">My Documents</h2>
+      <div className="grid gap-2 mb-10">
+        {ownedDocs.map(doc => (
+          <button key={doc.id} onClick={() => router.push(`/document/${doc.id}`)} className="text-left p-4 border rounded-md hover:bg-slate-50 transition">
+            {doc.title || 'Untitled Document'}
+          </button>
+        ))}
+        {ownedDocs.length === 0 && <p className="text-slate-500 text-sm">No documents yet.</p>}
       </div>
-      <div>
-        <h2 className="font-bold text-2xl mb-4">Next steps</h2>
-        <FetchDataSteps />
+
+      <h2 className="text-xl font-bold mb-4 border-b pb-2">Shared With Me</h2>
+      <div className="grid gap-2">
+        {sharedDocs.map(doc => (
+          <button key={doc.id} onClick={() => router.push(`/document/${doc.id}`)} className="text-left p-4 border rounded-md hover:bg-blue-50 transition">
+            {doc.title || 'Untitled Document'}
+          </button>
+        ))}
+        {sharedDocs.length === 0 && <p className="text-slate-500 text-sm">No shared documents.</p>}
       </div>
     </div>
-  );
+  )
 }
