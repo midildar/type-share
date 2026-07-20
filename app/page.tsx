@@ -7,7 +7,7 @@ export default async function Index() {
 
   // If logged in, go to dashboard. If not, go to login.
   if (user) {
-    redirect('/dashboard')
+    redirect('/protected')
   } else {
     redirect('/sign-in') // Change to '/login' if that's what your template uses
   }
