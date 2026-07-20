@@ -5,8 +5,11 @@ import TitleEditor from '@/components/TitleEditor'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
-// 1. Extract the data fetching and UI into its own async component
-async function DocumentContent({ id }: { id: string }) {
+// 1. The data component receives the PROMISE of params, not the awaited ID
+async function DocumentContent({ paramsPromise }: { paramsPromise: Promise<{ id: string }> }) {
+  // We await params safely INSIDE the Suspense boundary
+  const { id } = await paramsPromise
+  
   const supabase = await createClient()
 
   const { data: doc, error } = await supabase
@@ -90,19 +93,17 @@ async function DocumentContent({ id }: { id: string }) {
   )
 }
 
-// 2. The main page now just unwraps the params and provides the Suspense boundary
-export default async function DocumentPage({ 
+// 2. The main page is a standard, non-async component that passes the promise down
+export default function DocumentPage({ 
   params 
 }: { 
   params: Promise<{ id: string }> 
 }) {
-  const { id } = await params
-  
   return (
     <main className="max-w-4xl mx-auto py-10 px-4">
-      {/* Vercel's build compiler sees this Suspense block and safely skips pre-rendering the database queries inside */}
+      {/* Vercel sees Suspense immediately and builds the static shell without crashing */}
       <Suspense fallback={<div className="animate-pulse text-slate-400">Loading document...</div>}>
-        <DocumentContent id={id} />
+        <DocumentContent paramsPromise={params} />
       </Suspense>
     </main>
   )
