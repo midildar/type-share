@@ -13,3 +13,6 @@ A lightweight collaborative document editor built for speed, persistence, and se
 1. **Clone the repository and install dependencies:**
    ```bash
    npm install
+2. **Run local server:**
+   ```bash
+   npm run dev
