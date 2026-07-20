@@ -1,19 +1,14 @@
+import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import Editor from '@/components/Editor'
+import TitleEditor from '@/components/TitleEditor'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import TitleEditor from '@/components/TitleEditor'
-import { cookies } from 'next/headers'
 
-export default async function DocumentPage({ 
-  params 
-}: { 
-  params: Promise<{ id: string }> 
-}) {
-  const { id } = await params
+export const dynamic = 'force-dynamic'
 
-  await cookies()
-
+// 1. Extract the data fetching and UI into its own async component
+async function DocumentContent({ id }: { id: string }) {
   const supabase = await createClient()
 
   const { data: doc, error } = await supabase
@@ -53,7 +48,6 @@ export default async function DocumentPage({
     revalidatePath(`/document/${id}`)
   }
 
-  // NEW: Server Action to rename the document
   async function renameDocument(newTitle: string) {
     'use server'
     if (!newTitle || newTitle.trim() === '') return
@@ -66,12 +60,10 @@ export default async function DocumentPage({
   }
 
   return (
-    <main className="max-w-4xl mx-auto py-10 px-4">
+    <>
       <div className="mb-6 flex justify-between items-end border-b pb-4">
         <div className="flex-1 mr-8">
-          {/* NEW: Inline Editable Title Form */}
           <TitleEditor initialTitle={doc.title} onSave={renameDocument} />
-
           <p className="text-sm text-slate-500 mt-1 px-1">
             {isOwner ? 'You own this document' : 'Shared with you'}
           </p>
@@ -96,6 +88,24 @@ export default async function DocumentPage({
         )}
       </div>
       <Editor initialContent={doc.content} saveAction={saveDocument} />
+    </>
+  )
+}
+
+// 2. The main page now just unwraps the params and provides the Suspense boundary
+export default async function DocumentPage({ 
+  params 
+}: { 
+  params: Promise<{ id: string }> 
+}) {
+  const { id } = await params
+  
+  return (
+    <main className="max-w-4xl mx-auto py-10 px-4">
+      {/* Vercel's build compiler sees this Suspense block and safely skips pre-rendering the database queries inside */}
+      <Suspense fallback={<div className="animate-pulse text-slate-400">Loading document...</div>}>
+        <DocumentContent id={id} />
+      </Suspense>
     </main>
   )
 }
